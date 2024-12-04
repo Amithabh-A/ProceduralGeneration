@@ -9,8 +9,8 @@ var num_rooms = 50 # no of rooms to generate
 var min_size = 1 # min room size (in tiles)
 var max_size = 1 # max room size (in tiles) 
 const MIN_DISTANCE = TILE_SIZE * 2
-# culling can make dungeon less or more sparse. 
-var cull = 0.4 # chance to cull room
+
+var path: AStar3D  # AStar pathfinding object
 
 func _input(event):
 	if event.is_action_pressed('ui_select'):
@@ -42,14 +42,52 @@ func make_rooms():
 	# Step 2: Adjust points if they are too close
 	adjust_points(room_positions)
 	
-	#print(room_positions)
+	var room_positions_3d = []
+	
 
 	for pos in room_positions:
 		var room = Room.instantiate() as RigidBody2D
 		var room_size = Vector2(w, h)
 		room.make_room(pos, Vector2(w, h) * TILE_SIZE)
 		$Rooms.add_child(room)
+		room_positions_3d.append(Vector3(room.position.x, room.position.y, 0))
+		#path = find_mst(room_positions_3d)
+	path = find_mst(room_positions_3d)
+
+func find_mst(nodes: Array):
+	# Prim's algorithm
+	# Given an array of positions(nodes), generate a minimum 
+	# spanning tree
 	
+	# Initializes the Astar and add the first point
+	var path = AStar3D.new()
+	path.add_point(path.get_available_point_id(), nodes.pop_front())
+	
+	# repeats until no points remain
+	while nodes: 
+		var min_dist = INF
+		var min_p = null # position of that node
+		var p = null # current position
+		
+		# loop through the points in path
+		for p1 in path.get_point_ids():
+			var p1_pos = path.get_point_position(p1)
+			# loop through the remaining nodes
+			for p2 in nodes:
+				# if the node is closer, make it closest
+				if p1_pos.distance_to(p2) < min_dist:
+					min_dist = p1_pos.distance_to(p2)
+					min_p = p2
+					p = p1_pos
+		
+		# insert the resulting node to the path and add 
+		# its connection
+		var n = path.get_available_point_id()
+		path.add_point(n, min_p)
+		path.connect_points(path.get_closest_point(p), n)
+		# remove the nodes in the array so that it is not visited again
+		nodes.erase(min_p)
+	return path
 
 func is_too_close(room_positions, new_pos: Vector2):
 	for pos in room_positions:
@@ -62,6 +100,13 @@ func _draw():
 		draw_rect(Rect2(room.position - room.size, room.size * 2), 
 		Color(32, 228, 0), false)
 		
+	if path:
+		for p in path.get_point_ids():
+			for c in path.get_point_connections(p):
+				var pp = path.get_point_position(p)
+				var cp = path.get_point_position(c)
+				draw_line(Vector2(pp.x, pp.y), Vector2(cp.x, cp.y), 
+				Color(1, 1, 0, 1), 15, true)
 
 func _process(delta: float) -> void:
 	queue_redraw()
